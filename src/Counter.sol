@@ -1,14 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+pragma solidity 0.8.21;
 
-contract Counter {
-    uint256 public number;
+contract TwitterBot {
+    function buyTokens(address tokenAddress) external {}
 
-    function setNumber(uint256 newNumber) public {
-        number = newNumber;
-    }
-
-    function increment() public {
-        number++;
-    }
+    function sellTokens(address tokenAddress) external {}
 }
