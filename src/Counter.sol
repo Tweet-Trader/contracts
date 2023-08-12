@@ -2,12 +2,13 @@
 pragma solidity 0.8.21;
 
 import {IERC20} from "openzeppelin/interfaces/IERC20.sol";
-import {IUniswapRouter02} from "v2-periphery/interfaces/IUniswapV2Router02.sol";
+import {IUniswapV2Router02} from "v2-periphery/interfaces/IUniswapV2Router02.sol";
 import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
 
 contract TwitterBot {
-    IUniswapRouter02 public v2Router;
-    ISwapRouter public v3Router;
+    IUniswapV2Router02 public immutable v2Router;
+    ISwapRouter public immutable v3Router;
+    address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 
     constructor() {
         v2Router = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
@@ -15,29 +16,63 @@ contract TwitterBot {
     }
 
     function buyTokens_v2Router(address tokenAddress, uint256 amountIn, uint256 amountOutMin) external {
-        IERC20 token = IERC20(tokenAddress);
-
-        token.approve(address(UniswapV2Router02), amountIn);
-
         // amountOutMin must be retrieved from an oracle of some kind
         address[] memory path = new address[](2);
-        path[0] = UniswapV2Router02.WETH();
+        path[0] = WETH;
         path[1] = tokenAddress;
-        UniswapV2Router02.swapExactETHForTokensSupportingFeeOnTransferTokens{value: amountIn}(
+        v2Router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: amountIn}(
             amountOutMin, path, msg.sender, block.timestamp
         );
     }
 
-    function sellTokens_v2Router(address tokenAddress, uint256 amountOutMin) external {
+    function sellTokens_v2Router(address tokenAddress, uint256 amountIn, uint256 amountOutMin) external {
         IERC20 token = IERC20(tokenAddress);
 
-        token.approve(address(UniswapV2Router02), amountIn);
+        token.approve(address(v2Router), amountIn);
 
         address[] memory path = new address[](2);
         path[0] = tokenAddress;
-        path[1] = UniswapV2Router02.WETH();
-        UniswapV2Router02.swapExactTokensForETHSupportingFeeOnTransferTokens(
+        path[1] = WETH;
+        v2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
             amountIn, amountOutMin, path, msg.sender, block.timestamp
         );
+    }
+
+    function buyTokens_v3Router(address tokenAddress, uint256 amountIn, uint256 amountOutMin, uint24 poolFee)
+        external
+    {
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
+            tokenIn: WETH,
+            tokenOut: tokenAddress,
+            fee: poolFee,
+            recipient: msg.sender,
+            deadline: block.timestamp,
+            amountIn: amountIn,
+            amountOutMinimum: amountOutMin,
+            sqrtPriceLimitX96: 0
+        });
+
+        v3Router.exactInputSingle(params);
+    }
+
+    function sellTokens_v3Router(address tokenAddress, uint256 amountIn, uint256 amountOutMin, uint24 poolFee)
+        external
+    {
+        IERC20 token = IERC20(tokenAddress);
+
+        token.approve(address(v2Router), amountIn);
+
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
+            tokenIn: tokenAddress,
+            tokenOut: WETH,
+            fee: poolFee,
+            recipient: msg.sender,
+            deadline: block.timestamp,
+            amountIn: amountIn,
+            amountOutMinimum: amountOutMin,
+            sqrtPriceLimitX96: 0
+        });
+
+        v3Router.exactInputSingle(params);
     }
 }
