@@ -17,6 +17,11 @@ contract TwitterBot {
 
     error EthTransferFailed();
     error notOwner();
+    error TransferFailed();
+    error ApprovalFailed();
+
+    event TokensBought(address indexed user, address indexed tokenAddress, uint256 amountIn, uint256 amountOut);
+    event TokensSold(address indexed user, address indexed tokenAddress, uint256 amountIn, uint256 amountOut);
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert notOwner();
@@ -32,6 +37,7 @@ contract TwitterBot {
     function buyTokens_v2Router(address tokenAddress, uint256 amountOutMin) external payable {
         uint256 amountIn = msg.value * (denominator - teamFee) / denominator;
 
+        uint256 initialBalance = IERC20(tokenAddress).balanceOf(msg.sender);
         // amountOutMin must be retrieved from an oracle of some kind
         address[] memory path = new address[](2);
         path[0] = WETH;
@@ -39,12 +45,16 @@ contract TwitterBot {
         v2Router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: amountIn}(
             amountOutMin, path, msg.sender, block.timestamp
         );
+
+        emit TokensBought(
+            msg.sender, tokenAddress, amountIn, IERC20(tokenAddress).balanceOf(msg.sender) - initialBalance
+        );
     }
 
     function sellTokens_v2Router(address tokenAddress, uint256 amountIn, uint256 amountOutMin) external {
         IERC20 token = IERC20(tokenAddress);
         token.transferFrom(msg.sender, address(this), amountIn);
-        token.approve(address(v2Router), amountIn);
+        !token.approve(address(v2Router), amountIn);
 
         uint256 initialBalance = address(this).balance;
         address[] memory path = new address[](2);
@@ -58,6 +68,8 @@ contract TwitterBot {
         uint256 amountOut = (address(this).balance - initialBalance) * (denominator - teamFee) / denominator;
         (bool success,) = msg.sender.call{value: amountOut}("");
         if (!success) revert EthTransferFailed();
+
+        emit TokensSold(msg.sender, tokenAddress, amountIn, amountOut);
     }
 
     function buyTokens_v3Router(address tokenAddress, uint256 amountOutMin, uint24 poolFee) external payable {
