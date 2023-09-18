@@ -3,12 +3,9 @@ pragma solidity 0.8.21;
 
 import {IERC20} from "openzeppelin/interfaces/IERC20.sol";
 import {IUniswapV2Router02} from "v2-periphery/interfaces/IUniswapV2Router02.sol";
-import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
-import {console} from "forge-std/console.sol";
 
 contract TwitterBot {
     IUniswapV2Router02 private immutable v2Router;
-    ISwapRouter private immutable v3Router;
     address private immutable WETH;
     address private owner;
 
@@ -20,8 +17,8 @@ contract TwitterBot {
     error TransferFailed();
     error ApprovalFailed();
 
-    // event TokensBought(address indexed user, address indexed tokenAddress, uint256 amountIn, uint256 amountOut);
-    // event TokensSold(address indexed user, address indexed tokenAddress, uint256 amountIn, uint256 amountOut);
+    event Buy(address indexed user, address indexed tokenAddress, uint256 amountIn, uint256 amountOut);
+    event Sell(address indexed user, address indexed tokenAddress, uint256 amountIn, uint256 amountOut);
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert notOwner();
@@ -30,14 +27,13 @@ contract TwitterBot {
 
     constructor() {
         v2Router = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
-        v3Router = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
         WETH = v2Router.WETH();
     }
 
     function buyTokens_v2Router(address tokenAddress, uint256 amountOutMin) external payable {
         uint256 amountIn = msg.value * (denominator - teamFee) / denominator;
 
-        // uint256 initialBalance = IERC20(tokenAddress).balanceOf(msg.sender);
+        uint256 initialBalance = IERC20(tokenAddress).balanceOf(msg.sender);
         // amountOutMin must be retrieved from an oracle of some kind
         address[] memory path = new address[](2);
         path[0] = WETH;
@@ -46,9 +42,7 @@ contract TwitterBot {
             amountOutMin, path, msg.sender, block.timestamp
         );
 
-        // emit TokensBought(
-        //     msg.sender, tokenAddress, amountIn, IERC20(tokenAddress).balanceOf(msg.sender) - initialBalance
-        // );
+        emit Buy(msg.sender, tokenAddress, amountIn, IERC20(tokenAddress).balanceOf(msg.sender) - initialBalance);
     }
 
     function sellTokens_v2Router(address tokenAddress, uint256 amountIn, uint256 amountOutMin) external {
@@ -71,43 +65,7 @@ contract TwitterBot {
         (bool success,) = msg.sender.call{value: amountOut}("");
         if (!success) revert EthTransferFailed();
 
-        // emit TokensSold(msg.sender, tokenAddress, amountIn, amountOut);
-    }
-
-    function buyTokens_v3Router(address tokenAddress, uint256 amountOutMin, uint24 poolFee) external payable {
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
-            tokenIn: WETH,
-            tokenOut: tokenAddress,
-            fee: poolFee,
-            recipient: msg.sender,
-            deadline: block.timestamp,
-            amountIn: msg.value,
-            amountOutMinimum: amountOutMin,
-            sqrtPriceLimitX96: 0
-        });
-
-        v3Router.exactInputSingle(params);
-    }
-
-    function sellTokens_v3Router(address tokenAddress, uint256 amountIn, uint256 amountOutMin, uint24 poolFee)
-        external
-    {
-        IERC20 token = IERC20(tokenAddress);
-        token.transferFrom(msg.sender, address(this), amountIn);
-        token.approve(address(v3Router), amountIn);
-
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
-            tokenIn: tokenAddress,
-            tokenOut: WETH,
-            fee: poolFee,
-            recipient: msg.sender,
-            deadline: block.timestamp,
-            amountIn: amountIn,
-            amountOutMinimum: amountOutMin,
-            sqrtPriceLimitX96: 0
-        });
-
-        v3Router.exactInputSingle(params);
+        emit Sell(msg.sender, tokenAddress, amountIn, amountOut);
     }
 
     function withdraw() external payable onlyOwner {
